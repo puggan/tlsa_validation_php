@@ -132,9 +132,7 @@
 
 		$chain_list = array();
 		$last_chain_sha256 = '';
-		$last_chain_sha256_sql = '';
 		while($chain_cert = array_pop($certificate_chain))
-// 		foreach($connection_info['options']['ssl']['peer_certificate_chain'] as $depth => $chain_cert)
 		{
 			$chain_sha256 = openssl_x509_fingerprint($chain_cert, 'sha256');
 
@@ -143,36 +141,21 @@
 				continue;
 			}
 
-
-			$chain_sha256_sql = $database->quote($chain_sha256);
 			$chain_list[] = $chain_sha256;
-// 			$updated = $database->update("UPDATE cert SET pulse = NOW() WHERE sha256 = {$chain_sha256_sql}");
-			$updated = $database->update("UPDATE cert SET parent = {$last_chain_sha256_sql}, pulse = NOW() WHERE sha256 = {$chain_sha256_sql}");
 
-			if(!$updated)
-			{
-				$cert_output = '';
-				openssl_x509_export($chain_cert, $cert_output);
-				$cert_content_sql = $database->quote($cert_output);
-				$database->write("INSERT INTO cert SET sha256 = {$chain_sha256_sql}, parent = {$last_chain_sha256_sql}, birth = NOW(), pulse = NOW(), content = {$cert_content_sql}");
-			}
+			$cert_output = '';
+			openssl_x509_export($chain_cert, $cert_output);
+			ssl_store_cert($cert_output, $chain_sha256, $last_chain_sha256);
 
 			$last_chain_sha256 = $chain_sha256;
-			$last_chain_sha256_sql = $chain_sha256_sql;
 		}
 
 		$sha256 = openssl_x509_fingerprint($certificate, 'sha256');
+		$cert_output = '';
+		openssl_x509_export($certificate, $cert_output);
+		ssl_store_cert($cert_output, $sha256);
+
 		$sha256_sql = $database->quote($sha256);
-
-		$updated = $database->update("UPDATE cert SET pulse = NOW() WHERE sha256 = {$sha256_sql}");
-
-		if(!$updated)
-		{
-			$cert_output = '';
-			openssl_x509_export($certificate, $cert_output);
-			$cert_content_sql = $database->quote($cert_output);
-			$database->write("INSERT INTO cert SET sha256 = {$sha256_sql}, birth = NOW(), pulse = NOW(), content = {$cert_content_sql}");
-		}
 
 		$updated = $database->update("UPDATE connections SET pulse = NOW() WHERE domain = {$domain_sql} AND port = {$port} AND sha256 = {$sha256_sql}");
 
@@ -182,6 +165,52 @@
 		}
 
 		return array('domain' => $domain, 'port' => $port, 'sha256' => $sha256, 'cert' => $certificate, 'chain' => $chain_list, 'pulse' => TRUE);
+	}
+
+	function ssl_store_cert($export_text, $sha256, $parent_sha256 = NULL)
+	{
+		global $database;
+
+		$sha256_sql = $database->quote($sha256);
+
+		$set_parts = array();
+		$set_parts[] = 'pulse = NOW()';
+
+		if($parent_sha256)
+		{
+			$parent_sha256_sql = $database->quote($parent_sha256);
+
+			$set_parts[] = "parent = {$parent_sha256_sql}";
+		}
+
+		$updated = $database->update("UPDATE cert SET " . implode(", ", $set_parts) . " WHERE sha256 = {$sha256_sql}");
+
+		if($updated)
+		{
+			return $updated;
+		}
+
+		$set_parts[] = 'birth = NOW()';
+		$set_parts[] = "sha256 = {$sha256_sql}";
+		$export_text_sql = $database->quote($export_text);
+		$set_parts[] = "content = {$export_text_sql}";
+
+		return $database->write("INSERT INTO cert SET " . implode(", ", $set_parts));
+	}
+
+	function load_cert_from_file($file)
+	{
+		return load_cert_from_string(file_get_contents($file));
+	}
+
+	function load_cert_from_string($export_text)
+	{
+		$certificate = openssl_x509_read($export_text);
+		if(!$certificate) return FALSE;
+		$cert_output = '';
+		openssl_x509_export($certificate, $cert_output);
+		$sha256 = openssl_x509_fingerprint($certificate, 'sha256');
+		ssl_store_cert($cert_output, $sha256);
 	}
 
 	function html_options($list, $selected)
