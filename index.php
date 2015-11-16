@@ -75,109 +75,75 @@
 		$tlsa['selector_text'] = isset($selector_list[$tlsa['selector']]) ? $selector_list[$tlsa['selector']] : '?';
 		$tlsa['matchingtype_text'] = isset($matchingtype_list[$tlsa['matchingtype']]) ? $matchingtype_list[$tlsa['matchingtype']] : '?';
 
+		$key_names = array();
+		$key_names[0][1]='hex_only_content';
+		$key_names[0][1]='sha256';
+		$key_names[0][2]='sha512';
+		$key_names[1][1]='pub_key_hex_only_content';
+		$key_names[1][1]='pub_key_sha256';
+		$key_names[1][2]='pub_key_sha512';
+
+		$key_titles = array();
+		$key_titles[0][1]='certificate content';
+		$key_titles[0][1]='certificate sha256-hash';
+		$key_titles[0][2]='certificate sha512-hash';
+		$key_titles[1][1]='pubkey content';
+		$key_titles[1][1]='pubkey sha256-hash';
+		$key_titles[1][2]='pubkey sha512-hash';
+
+		if(isset($key_names[$tlsa['selector']][$tlsa['matchingtype']]))
+		{
+			$key_name = $key_names[$tlsa['selector']][$tlsa['matchingtype']];
+			$key_title = $key_titles[$tlsa['selector']][$tlsa['matchingtype']];
+			$tlsa_hash = $tlsa['matchingtype'] ? strtolower($tlsa['hash']) : $tlsa['hash'];
+		}
+		else
+		{
+			$key_name = NULL;
+		}
+
 		if(!$cert_meta)
 		{
 			$tlsa['status'] = 'Unknown (certificate not loaded)';
 		}
-		else if($tlsa['usage'] != 3)
+		else if($tlsa['usage'] == 3)
+		{
+			if($tlsa_hash == $cert_meta[$key_name])
+			{
+				$tlsa['status'] = "OK, {$key_title} matches";
+				$status_class = 'status_ok';
+			}
+			else
+			{
+				$tlsa['status'] = "BAD, {$key_title} differ";
+				$status_class = 'status_bad';
+			}
+		}
+		else if($tlsa['usage'] > 3 OR $tlsa['usage'] < 0)
 		{
 			$tlsa['status'] = 'Unknown (usage type not supported yet)';
 		}
-		else if($tlsa['selector'] == 0)
+		else if($key_name)
 		{
-			if($tlsa['matchingtype'] == 1)
+			$tlsa['status'] = "Unknown (usage type not supported yet), didn't find certificate in chain";
+			$status_class = 'status_bad';
+			foreach($chain as $current)
 			{
-				if(strtolower($tlsa['hash']) == $cert_meta['sha256'])
+				if($tlsa_hash == $current[$key_name])
 				{
-					$tlsa['status'] = 'OK, sha256-hash matches';
+					$tlsa['status'] = "Unknown (usage type not supported yet), found certificate in chain";
 					$status_class = 'status_ok';
+					break;
 				}
-				else
-				{
-					$tlsa['status'] = 'BAD, sha256-hash differ';
-					$status_class = 'status_bad';
-				}
-			}
-			else if($tlsa['matchingtype'] == 2)
-			{
-				if(strtolower($tlsa['hash']) == $cert_meta['sha512'])
-				{
-					$tlsa['status'] = 'OK, sha512-hash matches';
-					$status_class = 'status_ok';
-				}
-				else
-				{
-					$tlsa['status'] = 'BAD, sha512-hash differ';
-					$status_class = 'status_bad';
-				}
-			}
-			else if($tlsa['matchingtype'] == 0)
-			{
-				if($tlsa['hash'] == $cert_meta['hex_only_content'])
-				{
-					$tlsa['status'] = 'OK, content matches';
-					$status_class = 'status_ok';
-				}
-				else
-				{
-					$tlsa['status'] = 'BAD, content differ';
-					$status_class = 'status_bad';
-				}
-			}
-			else
-			{
-				$tlsa['status'] = 'Unknown (matchingtype type not supported yet)';
 			}
 		}
-		else if($tlsa['selector'] == 1)
+		else if($tlsa['selector'] > 1 OR $tlsa['selector'] < 0)
 		{
-			if($tlsa['matchingtype'] == 1)
-			{
-				if(strtolower($tlsa['hash']) == $cert_meta['pub_key_sha256'])
-				{
-					$tlsa['status'] = 'OK, sha256-hash matches';
-					$status_class = 'status_ok';
-				}
-				else
-				{
-					$tlsa['status'] = 'BAD, sha256-hash differ';
-					$status_class = 'status_bad';
-				}
-			}
-			else if($tlsa['matchingtype'] == 2)
-			{
-				if(strtolower($tlsa['hash']) == $cert_meta['pub_key_sha512'])
-				{
-					$tlsa['status'] = 'OK, sha512-hash matches';
-					$status_class = 'status_ok';
-				}
-				else
-				{
-					$tlsa['status'] = 'BAD, sha512-hash differ';
-					$status_class = 'status_bad';
-				}
-			}
-			else if($tlsa['matchingtype'] == 0)
-			{
-				if($tlsa['hash'] == $cert_meta['pub_key_hex_only_content'])
-				{
-					$tlsa['status'] = 'OK, content matches';
-					$status_class = 'status_ok';
-				}
-				else
-				{
-					$tlsa['status'] = 'BAD, content differ';
-					$status_class = 'status_bad';
-				}
-			}
-			else
-			{
-				$tlsa['status'] = 'Unknown (matchingtype type not supported yet)';
-			}
+			$tlsa['status'] = 'Unknown (selector type not supported yet)';
 		}
 		else
 		{
-			$tlsa['status'] = 'Unknown (selector type not supported yet)';
+			$tlsa['status'] = 'Unknown (matchingtype type not supported yet)';
 		}
 	}
 	else
