@@ -92,6 +92,10 @@
 
 		$errno = 0;
 		$errstr = '';
+		$url = "tcp://{$domain}:{$port}";
+		$connection_client = stream_socket_client($url, $errno, $errstr, 30, STREAM_CLIENT_CONNECT, $connection_context);
+
+		if(!$connection_client) return FALSE;
 
 		if($protocol == 'auto')
 		{
@@ -110,29 +114,15 @@
 		{
 			case 'smtp':
 			{
-				$url = "tcp://{$domain}:{$port}";
-
-				$connection_client = stream_socket_client($url, $errno, $errstr, 30, STREAM_CLIENT_CONNECT, $connection_context);
-
 				stream_set_timeout($connection_client, 2);
 				fread($connection_client, 10240);
 				fwrite($connection_client, "STARTTLS\n");
 				fread($connection_client, 10240);
-				stream_socket_enable_crypto($connection_client, TRUE, STREAM_CRYPTO_METHOD_SSLv23_CLIENT);
-
-				break;
-			}
-
-			default:
-			{
-				$url = "ssl://{$domain}:{$port}";
-
-				$connection_client = stream_socket_client($url, $errno, $errstr, 30, STREAM_CLIENT_CONNECT, $connection_context);
 				break;
 			}
 		}
 
-
+		stream_socket_enable_crypto($connection_client, TRUE, STREAM_CRYPTO_METHOD_SSLv23_CLIENT);
 		$connection_info = stream_context_get_params($connection_client);
 		$certificate = $connection_info['options']['ssl']['peer_certificate'];
 		$certificate_chain = $connection_info['options']['ssl']['peer_certificate_chain'];
